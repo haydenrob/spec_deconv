@@ -14,6 +14,8 @@ from matplotlib.ticker import AutoMinorLocator
 from matplotlib import gridspec
 import matplotlib.ticker as ticker
 
+from scipy.special import wofz
+
 class spec_deconv:
 	"""
 	A simple Python script for the deconvolution of spectral peaks from FTIR or Raman scattering.
@@ -76,16 +78,17 @@ class spec_deconv:
 
 		return x, y
 
-	def fun_gauss(x, amp,cen,sig):
+	@staticmethod
+	def fun_gauss(x, amp,cen,sigma):
 		"""
-		Gaussian function evaluation
+		Gaussian function evaluation.
 
 		Parameters
 		-----------
 			x : 1D array, Wavenumbers
 			amp : float, Amplitude of the function
 			cen : float, Centroid of the function
-			sig : float, Standard deviation (sigma) of the function
+			sigma : float, Standard deviation of the function
 
 
 		Returns
@@ -95,7 +98,75 @@ class spec_deconv:
 
 		"""
 		
-		return amp*(1/(sig*(np.sqrt(2*np.pi))))*(np.exp((-1/2)*((x-cen)**2/(sig**2))))
+		return amp*(1/(sigma*(np.sqrt(2*np.pi))))*(np.exp((-1/2)*((x-cen)**2/(sigma**2))))
+
+	@staticmethod
+	def fun_lorentzian(x, amp, cen, gamma):
+		"""
+		Lorentzian function evaluation.
+
+		Parameters
+		-----------
+			x : 1D array, Wavenumbers
+			amp : float, Amplitude of the function
+			cen : float, Centroid of the function
+			gamma : float, specifies the half-width at half-maximum (HWHM), 2*gamma is full width at half maximum (FWHM). Gamma is also twice the IQR.
+
+
+		Returns
+		-----------
+			y : 1D array, Lorentzian function values
+
+
+		"""
+		
+		return amp*(1/(np.pi*gamma*(1+((x - cen)/gamma)^2)))
+
+	@staticmethod
+	def fun_voigt(x, amp, cen, sigma, gamma):
+		"""
+		Voigt function evaluation.
+
+		Parameters
+		-----------
+			x : 1D array, Wavenumbers
+			amp : float, Amplitude of the function
+			cen : float, Centroid of the function
+			sigma : float, specifies the standard deviation of the Gaussian function.
+			gamma : float, specifies the half-width at half-maximum (HWHM) of the Lorentzian function, 2*gamma is full width at half maximum (FWHM). Gamma is also twice the IQR.
+
+
+		Returns
+		-----------
+			y : 1D array, Voigt function values
+
+
+		"""
+
+		return amp*np.real(wofz(((x-cen) + 1j*gamma)/sigma/np.sqrt(2))) / sigma/np.sqrt(2*np.pi)
+
+
+	def fun(self, fun_name):
+		"""
+		Choose the type of function you want to fit the data.
+
+		Parameters
+		-----------
+			fun_name : str, 'gaussian', 'lorentzian' or 'voigt'.
+
+
+		"""
+
+		if fun_name == 'gaussian':
+			self.fun_name = spec_deconv.fun_gauss
+
+		elif fun_name == 'lorentzian':
+			self.fun_name = spec_deconv.fun_lorentzian
+
+		elif fun_name == 'voigt':
+			self.fun_name = spec_deconv.fun_voigt
+		else:
+			print("Check spelling.")
 
 	def auto_params(self, centroids, lower=0.99, upper=1.01):
 		"""
@@ -118,10 +189,19 @@ class spec_deconv:
 		
 		params = lmfit.Parameters()
 		params.add('num_peaks', value=self.num_peaks, vary=False)
-		for i in range(self.num_peaks):
-				params.add_many((f'amp_{i+1}',   0.1,    True,  0,    50,   None),
+
+		if self.fun_name == spec_deconv.fun_voigt:
+			for i in range(self.num_peaks):
+				params.add_many((f'amp_{i+1}',   0.1,    True,  0,    200,   None),
 				(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None),
-				(f'sig_{i+1}',   25,     True,  0,    310,  None))
+				(f'sigma_{i+1}',   25,     True,  0,    1000,  None),
+				(f'gamma_{i+1}',   25,     True,  0,    1000,  None))
+			
+		else:
+			for i in range(self.num_peaks):
+					params.add_many((f'amp_{i+1}',   0.1,    True,  0,    75,   None),
+					(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None),
+					(f'sigma_{i+1}',   25,     True,  0,    310,  None))
 
 		return params
 
@@ -144,7 +224,7 @@ class spec_deconv:
 
 
 	@staticmethod
-	def res(params, x, y):
+	def _res(params, x, y, fun):
 		"""
 		Calculates the residuals between the model and the raw data.
 
@@ -166,9 +246,16 @@ class spec_deconv:
 		all_peaks = []
 
 		num_peaks = params['num_peaks'].value
-		for i in range(num_peaks):
-			globals()[f"peak{i+1}"] = spec_deconv.fun_gauss(x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sig_{i+1}'].value)
-			model += globals()[f"peak{i+1}"]
+
+		if fun == spec_deconv.fun_voigt:
+			for i in range(num_peaks):
+				globals()[f"peak{i+1}"] = fun(x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sigma_{i+1}'].value, params[f'gamma_{i+1}'].value)
+				model += globals()[f"peak{i+1}"]
+
+		else:
+			for i in range(num_peaks):
+				globals()[f"peak{i+1}"] = fun(x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sigma_{i+1}'].value)
+				model += globals()[f"peak{i+1}"]
     
 		return abs(model - y)
 
@@ -190,15 +277,46 @@ class spec_deconv:
 
 		"""
 		model = 0
+		all_peaks = []
 		num_peaks = params['num_peaks'].value
 
 		for i in range(num_peaks):
-			globals()[f"peak{i+1}"] = spec_deconv.fun_gauss(self.x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sig_{i+1}'].value)
+			globals()[f"peak{i+1}"] = spec_deconv.fun_gauss(self.x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sigma_{i+1}'].value)
 			model += globals()[f"peak{i+1}"]
+			all_peaks.append(globals()[f"peak{i+1}"])
 
+		all_peaks.insert(0, model)
 		self.model = model
 	    
-		return model, peak1, peak2, peak3, peak4, peak5, peak6
+		for i in all_peaks:
+			yield i
+
+
+	def update_model(self, params):
+		"""
+		Updates the model based on parameters. Useful for post fitting.
+
+		Parameters
+		-----------
+			params : parameters from lmfit module
+
+
+		Returns
+		-----------
+			model : 2D array, model overarching peak based on convolution of sub-peaks.
+
+		"""
+
+		model = 0
+		all_peaks = []
+		num_peaks = params['num_peaks'].value
+
+		for i in range(num_peaks):
+			globals()[f"peak{i+1}"] = spec_deconv.fun_gauss(self.x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sigma_{i+1}'].value)
+			model += globals()[f"peak{i+1}"]
+	
+		return model
+
 
 	def fit(self, params, x, y, method = 'least_squares'):
 		"""
@@ -218,10 +336,10 @@ class spec_deconv:
 
 
 		"""
-		fit = lmfit.minimize(spec_deconv.res, params, method = method, args=(x,y))
+		fit = lmfit.minimize(spec_deconv._res, params, method = method, args=(x,y, self.fun_name))
 
-		spec_deconv.update_peaks(self, fit.params)
-
+		self.model = spec_deconv.update_model(self, fit.params)
+		
 		return fit
 
 	def plot_model(self, model, save=False, name=None):
@@ -253,7 +371,7 @@ class spec_deconv:
 		if save == True:
 			fig.savefig(f"{name}.png", format="png",dpi=1000)	
 	
-	def plot_all(self, params, save=False, name=None):
+	def plot_all(self, params, save=False, name=None, opac = 0.5):
 		"""
 		Plots the raw data and model, with deconvoluted peaks also.
 
@@ -262,6 +380,7 @@ class spec_deconv:
 			params : parameters from lmfit module. Ideally the optimised/fitted parameters.
 			save : bool, Variable to determine if the figure will be saved. Default is false.
 			name : str, Name if the figure is to be saved.
+			opac : flat, Opacity in [0,1]. Default is 0.5.
 
 		Returns
 		-----------
@@ -271,17 +390,18 @@ class spec_deconv:
 		fig = plt.figure(figsize=(10,6))
 		gs = gridspec.GridSpec(1,1)
 		ax1 = fig.add_subplot(gs[0])
-		col = ['green', 'yellow', 'blue', 'red', 'purple', 'orange', 'pink']
+		col = ['green', 'yellow', 'blue', 'red', 'purple', 'orange', 'pink']*3
 
 		ax1.plot(self.x, self.y, "ro")
 		ax1.plot(self.x, self.model, 'k--')
 
-		for i in range(self.num_peaks):
-			p = spec_deconv.fun_gauss(self.x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sig_{i+1}'].value)
+		for i in range(params['num_peaks'].value):
+			p = spec_deconv.fun_gauss(self.x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sigma_{i+1}'].value)
 			ax1.plot(self.x, p, "g")
-			ax1.fill_between(self.x, p.min(), p, facecolor=col[i], alpha=0.5)
+			ax1.fill_between(self.x, p.min(), p, facecolor=col[i], alpha=opac)
 
 		fig.tight_layout()
+		fig.suptitle(name, fontsize=16, y=1.05)
 		ax1.set_ylabel("Absorbance",family="serif",  fontsize=12)
 		ax1.set_xlabel("Wavenumber (cm$^{-1}$)",family="serif",  fontsize=12)
 
