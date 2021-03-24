@@ -49,14 +49,15 @@ class spec_deconv:
 		data = pd.DataFrame(np.genfromtxt(path, skip_header=1, names=['Wavenumber', 'Absorbance']))
 		return data
 
-	def pretty_data(self, data, wav_num, plot=False):
+	def pretty_data(self, data, min_wav=0, max_wav=4000, plot=False):
 		"""
 		Creates two sub 1D arrays which cover only a domain and range of interest. Can plot this desired region also (plot = True).
 
 		Parameters
 		-----------
 			data : pd.DataFrame
-			wav_num : int or float, The minimum wavenumber of interest.
+			min_wav : int or float, The minimum wavenumber of interest. Default is 0.
+			max_wav : int or float, The maximum wavenumber of interest. Default is 4000.
 
 
 		Returns
@@ -67,8 +68,8 @@ class spec_deconv:
 
 		"""
 		
-		x = data[data.Wavenumber > wav_num]['Wavenumber']
-		y = data[data.Wavenumber > wav_num]['Absorbance']
+		x = data[(data.Wavenumber >= min_wav) & (data.Wavenumber <= max_wav)]['Wavenumber']
+		y = data[(data.Wavenumber >= min_wav) & (data.Wavenumber <= max_wav)]['Absorbance']
 
 		self.x = x
 		self.y = y
@@ -199,9 +200,9 @@ class spec_deconv:
 			
 		else:
 			for i in range(self.num_peaks):
-					params.add_many((f'amp_{i+1}',   0.1,    True,  0,    75,   None),
-					(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None),
-					(f'sigma_{i+1}',   25,     True,  0,    310,  None))
+					params.add_many((f'amp_{i+1}',   0.1,    True,  0, None,  None), #was 0, 75
+					(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None), #was centroids[i]*lower, centroids[i]*upper
+					(f'sigma_{i+1}',   25,     True,  0, None,  None)) #was 0, 310
 
 		return params
 
@@ -318,7 +319,7 @@ class spec_deconv:
 		return model
 
 
-	def fit(self, params, x, y, method = 'least_squares'):
+	def fit(self, params, x, y, method = 'least_squares', results = False):
 		"""
 		Fits the raw data to the desired function - i.e. by minimising the residuals.
 
@@ -328,6 +329,7 @@ class spec_deconv:
 			x : 1D array, domain of interest
 			y : 1D array, range of interest
 			method : str, method for fitting. Default is 'least_squares'. Full list found in lmfit documentation.
+			results : bool, Print results.
 
 
 		Returns
@@ -339,6 +341,9 @@ class spec_deconv:
 		fit = lmfit.minimize(spec_deconv._res, params, method = method, args=(x,y, self.fun_name))
 
 		self.model = spec_deconv.update_model(self, fit.params)
+
+		if results == True:
+			print(lmfit.report_fit(fit))
 		
 		return fit
 
