@@ -395,7 +395,7 @@ class spec_deconv:
 		fig = plt.figure(figsize=(10,6))
 		gs = gridspec.GridSpec(1,1)
 		ax1 = fig.add_subplot(gs[0])
-		col = ['green', 'yellow', 'blue', 'red', 'purple', 'orange', 'pink']*3
+		col = ['green', 'yellow', 'blue', 'red', 'purple', 'orange', 'pink']*12
 
 		ax1.plot(self.x, self.y, "ro")
 		ax1.plot(self.x, self.model, 'k--')
