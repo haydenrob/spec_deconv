@@ -48,6 +48,16 @@ class spec_deconv:
 
 		data = pd.DataFrame(np.genfromtxt(path, skip_header=1, names=['Wavenumber', 'Absorbance']))
 		return data
+		
+	def load_excel(self, df, sheetname, conc):
+		"""
+		Loads data from Tim's excel files
+		"""
+		
+		data = pd.read_excel(df, sheet_name=sheetname, header=1)
+		newdata = data[['Unnamed: 0', conc,]].copy()
+		newdata = newdata.rename(columns={conc:'Absorbance', 'Unnamed: 0':'Wavenumber'})
+		return newdata
 
 	def pretty_data(self, data, min_wav=0, max_wav=4000, plot=False):
 		"""
@@ -193,16 +203,16 @@ class spec_deconv:
 
 		if self.fun_name == spec_deconv.fun_voigt:
 			for i in range(self.num_peaks):
-				params.add_many((f'amp_{i+1}',   0.1,    True,  0,    200,   None),
+				params.add_many((f'amp_{i+1}',   0.1,    True,  0,    0.275,   None),
 				(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None),
 				(f'sigma_{i+1}',   25,     True,  0,    1000,  None),
 				(f'gamma_{i+1}',   25,     True,  0,    1000,  None))
 			
 		else:
 			for i in range(self.num_peaks):
-					params.add_many((f'amp_{i+1}',   0.1,    True,  0, None,  None), #was 0, 75
+					params.add_many((f'amp_{i+1}',   0.1,    True,  0, 100,  None), #was 0, 75
 					(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None), #was centroids[i]*lower, centroids[i]*upper
-					(f'sigma_{i+1}',   25,     True,  0, None,  None)) #was 0, 310
+					(f'sigma_{i+1}',   25,     True,  0, 100,  None)) #was 0, 310
 
 		return params
 
@@ -369,13 +379,13 @@ class spec_deconv:
 		ax1.plot(self.x, self.y, "ro")
 		ax1.plot(self.x, model, 'k--')
 
-		fig.tight_layout()
 		ax1.set_ylabel("Absorbance",family="serif",  fontsize=12)
 		ax1.set_xlabel("Wavenumber (cm$^{-1}$)",family="serif",  fontsize=12)
 
 		if save == True:
-			fig.savefig(f"{name}.png", format="png",dpi=1000)	
-	
+			fig.tight_layout()
+			fig.savefig(f"{name}.png", format="png", dpi=600)
+
 	def plot_all(self, params, save=False, name=None, opac = 0.5):
 		"""
 		Plots the raw data and model, with deconvoluted peaks also.
@@ -397,18 +407,18 @@ class spec_deconv:
 		ax1 = fig.add_subplot(gs[0])
 		col = ['green', 'yellow', 'blue', 'red', 'purple', 'orange', 'pink']*12
 
-		ax1.plot(self.x, self.y, "ro")
-		ax1.plot(self.x, self.model, 'k--')
-
 		for i in range(params['num_peaks'].value):
 			p = spec_deconv.fun_gauss(self.x,params[f'amp_{i+1}'].value,params[f'cen_{i+1}'].value,params[f'sigma_{i+1}'].value)
 			ax1.plot(self.x, p, "g")
 			ax1.fill_between(self.x, p.min(), p, facecolor=col[i], alpha=opac)
 
-		fig.tight_layout()
+		ax1.plot(self.x, self.y, "ro")
+		ax1.plot(self.x, self.model, 'k--')
+
 		fig.suptitle(name, fontsize=16, y=1.05)
 		ax1.set_ylabel("Absorbance",family="serif",  fontsize=12)
 		ax1.set_xlabel("Wavenumber (cm$^{-1}$)",family="serif",  fontsize=12)
 
 		if save == True:
+			fig.tight_layout()
 			fig.savefig(f"{name}.png", format="png",dpi=1000)
