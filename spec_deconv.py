@@ -30,13 +30,14 @@ class spec_deconv:
 
 		print(f"Spectral deconvolution module loaded: {num_peaks} peaks.")
 	
-	def load(self, path):
+	def load(self, path, ydata="Absorbance"):
 		"""
 		Loads in the data. Currently must be a 2D array in txt format, with the headers 'Wavenumber' and 'Absorbance'.
 
 		Parameters
 		-----------
 			path : str, The file path where the data is stored.
+			ydata : str, Either "Absorbance" or "Transmission"
 
 
 		Returns
@@ -46,7 +47,13 @@ class spec_deconv:
 
 		"""
 
-		data = pd.DataFrame(np.genfromtxt(path, skip_header=1, names=['Wavenumber', 'Absorbance']))
+		# data = pd.DataFrame(np.genfromtxt(path, skip_header=1, names=['Wavenumber', 'Absorbance']))
+		
+		data = pd.read_csv(path, skiprows=2, names=['Wavenumber', ydata])
+	
+		if ydata == "Transmission":
+			data["Absorbance"] = 100 - data["Transmission"]
+		
 		return data
 		
 	def load_excel(self, df, sheetname, conc):
@@ -205,14 +212,14 @@ class spec_deconv:
 			for i in range(self.num_peaks):
 				params.add_many((f'amp_{i+1}',   0.1,    True,  0,    0.275,   None),
 				(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None),
-				(f'sigma_{i+1}',   25,     True,  0,    1000,  None),
+				(f'sigma_{i+1}',   25,     True,  0,    100,  None),
 				(f'gamma_{i+1}',   25,     True,  0,    1000,  None))
 			
 		else:
 			for i in range(self.num_peaks):
 					params.add_many((f'amp_{i+1}',   0.1,    True,  0, 100,  None), #was 0, 75
 					(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None), #was centroids[i]*lower, centroids[i]*upper
-					(f'sigma_{i+1}',   25,     True,  0, 100,  None)) #was 0, 310
+					(f'sigma_{i+1}',   25,     True,  0, 300,  None)) #was 0, 310
 
 		return params
 
@@ -296,11 +303,13 @@ class spec_deconv:
 			model += globals()[f"peak{i+1}"]
 			all_peaks.append(globals()[f"peak{i+1}"])
 
-		all_peaks.insert(0, model)
+		# all_peaks.insert(0, model)
 		self.model = model
 	    
-		for i in all_peaks:
-			yield i
+		# for i in all_peaks:
+		#	yield i
+		
+		return model, all_peaks
 
 
 	def update_model(self, params):
@@ -421,4 +430,4 @@ class spec_deconv:
 
 		if save == True:
 			fig.tight_layout()
-			fig.savefig(f"{name}.png", format="png",dpi=1000)
+			fig.savefig(f"plots/{name}.png", format="png",dpi=1000)
