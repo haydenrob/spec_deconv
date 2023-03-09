@@ -55,6 +55,31 @@ class spec_deconv:
 			data["Absorbance"] = 100 - data["Transmission"]
 		
 		return data
+
+
+	def load_gpc(self, path):
+		"""
+		Loads in the data. Currently must be a 2D array in txt format, with the headers 'Wavenumber' and 'Absorbance'.
+
+		Parameters
+		-----------
+			path : str, The file path where the data is stored.
+			ydata : str, Either "Absorbance" or "Transmission"
+
+
+		Returns
+		-----------
+			data : pd.DataFrame
+
+
+		"""
+
+		# data = pd.DataFrame(np.genfromtxt(path, skip_header=1, names=['Wavenumber', 'Absorbance']))
+		
+		data = pd.read_csv(path, skiprows=1, names=['MW', 'RI', 'nRI'])
+	
+		
+		return data
 		
 	def load_excel(self, df, sheetname, conc):
 		"""
@@ -66,7 +91,7 @@ class spec_deconv:
 		newdata = newdata.rename(columns={conc:'Absorbance', 'Unnamed: 0':'Wavenumber'})
 		return newdata
 
-	def pretty_data(self, data, min_wav=0, max_wav=4000, plot=False):
+	def pretty_data(self, data, min_wav=0, max_wav=4000, plot=False, xdata='Wavenumber', ydata='Absorbance'):
 		"""
 		Creates two sub 1D arrays which cover only a domain and range of interest. Can plot this desired region also (plot = True).
 
@@ -85,8 +110,8 @@ class spec_deconv:
 
 		"""
 		
-		x = data[(data.Wavenumber >= min_wav) & (data.Wavenumber <= max_wav)]['Wavenumber']
-		y = data[(data.Wavenumber >= min_wav) & (data.Wavenumber <= max_wav)]['Absorbance']
+		x = data[(data[xdata] >= min_wav) & (data[xdata] <= max_wav)][xdata]
+		y = data[(data[xdata] >= min_wav) & (data[xdata] <= max_wav)][ydata]
 
 		self.x = x
 		self.y = y
@@ -217,9 +242,9 @@ class spec_deconv:
 			
 		else:
 			for i in range(self.num_peaks):
-					params.add_many((f'amp_{i+1}',   0.1,    True,  0, 100,  None), #was 0, 75
+					params.add_many((f'amp_{i+1}',   0.1,    True,  0, 10000,  None), #was 0, 75
 					(f'cen_{i+1}',   centroids[i],   True,  centroids[i]*lower, centroids[i]*upper, None), #was centroids[i]*lower, centroids[i]*upper
-					(f'sigma_{i+1}',   25,     True,  0, 300,  None)) #was 0, 310
+					(f'sigma_{i+1}',   5,     True,  0, 50,  None)) #was 0, 310
 
 		return params
 
