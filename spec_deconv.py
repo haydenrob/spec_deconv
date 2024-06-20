@@ -30,7 +30,7 @@ class spec_deconv:
 
 		print(f"Spectral deconvolution module loaded: {num_peaks} peaks.")
 	
-	def load(self, path, ydata="Absorbance"):
+	def load(self, path, ydata="Absorbance", delimiter='\t'):
 		"""
 		Loads in the data. Currently must be a 2D array in txt format, with the headers 'Wavenumber' and 'Absorbance'.
 
@@ -49,7 +49,7 @@ class spec_deconv:
 
 		# data = pd.DataFrame(np.genfromtxt(path, skip_header=1, names=['Wavenumber', 'Absorbance']))
 		
-		data = pd.read_csv(path, skiprows=2, names=['Wavenumber', ydata])
+		data = pd.read_csv(path, skiprows=2, names=['Wavenumber', ydata], delimiter=delimiter)
 	
 		if ydata == "Transmission":
 			data["Absorbance"] = 100 - data["Transmission"]
